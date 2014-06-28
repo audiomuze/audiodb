@@ -97,6 +97,13 @@ def import_dir(dbpath, dirpath):
             else:
                 logging.warning('Invalid file: ' + filepath)
 
+def export_db(dbpath, dirpath):
+    conn = sqlite3.connect(dbpath)
+    cursor = conn.cursor()
+    
+    for row in conn.execute('SELECT * from audio'):
+        print row
+
 def parse_args():
     parser = argparse.ArgumentParser(description='Import/Save files to sqlite database.')
     parser.add_argument('action', choices=['import', 'export'],
@@ -113,6 +120,9 @@ def parse_args():
         logging.basicConfig(level=args.log.upper())
     if args.action == 'import':
         import_dir(args.dbpath, args.musicdir)
+    else:
+        export_db(args.dbpath, args.musicdir):
+        
     
 if __name__ == '__main__':
     parse_args()
