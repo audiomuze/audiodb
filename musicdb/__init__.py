@@ -8,6 +8,22 @@ from operator import itemgetter
 
 from puddlestuff import audioinfo
 
+def removeslash(x):
+    while x.endswith('/'):
+        return removeslash(x[:-1])
+    return x
+
+def issubfolder(parent, child, level=1):
+    dirlevels = lambda a: len(a.split('/'))
+    parent, child = removeslash(parent), removeslash(child)
+    if isinstance(parent, unicode):
+        sep = unicode(os.path.sep)
+    else:
+        sep = os.path.sep
+    if child.startswith(parent + sep) and dirlevels(parent) < dirlevels(child):
+        return True
+    return False
+
 def getfiles(files, subfolders = False):
     if isinstance(files, basestring):
         files = [files]
@@ -39,7 +55,11 @@ def getfiles(files, subfolders = False):
 
 def execute(conn, sql, args=None):
     if args:
-        logging.debug(sql + u' ' + u';'.join(args))
+        try:
+            log_args = (str(z) if not isinstance(z, basestring) else z for z in args)
+            logging.debug(sql + u' ' + u';'.join(log_args))
+        except:
+            pass
         return conn.execute(sql, args)
     else:
         logging.debug(sql)
@@ -48,7 +68,12 @@ def execute(conn, sql, args=None):
 def initdb(dbpath):
     conn = sqlite3.connect(dbpath)
     cursor = conn.cursor()
-    execute(conn, 'CREATE TABLE IF NOT EXISTS audio (__filename text unique)');
+    execute(conn, '''CREATE TABLE IF NOT EXISTS audio (
+    __path blob unique,
+    __filename blob,
+    __dirpath blob,
+    __filename_no_ext blob,
+    __ext blob)''');
     conn.commit()
     return conn
 
@@ -56,10 +81,15 @@ def import_tag(tag, conn, tables):
     keys = []
     values = []
     for key, value in tag.items():
-        if isinstance(value, (int, long)):
-            value = unicode(value)
-        elif not isinstance(value, basestring):
-            value = u"\\\\".join(value)
+        if key == '__path':
+            value = buffer(tag.filepath)
+        else:
+            if isinstance(value, (int, long)):
+                value = unicode(value)
+            elif not isinstance(value, basestring):
+                value = u"\\\\".join(value)
+
+        
         keys.append(key)
         values.append(value)
 
@@ -74,7 +104,7 @@ def update_db_columns(conn, tables):
     cursor = execute(conn, 'SELECT * from audio')
     new_tables = set(tables).difference(map(itemgetter(0), cursor.description))
     for table in new_tables:
-        logging.info(u'Creating table ' % table)
+        logging.info(u'Creating %s table' % table)
         execute(conn, u'ALTER TABLE audio ADD COLUMN %s text' % table)
     conn.commit()
     
@@ -97,12 +127,44 @@ def import_dir(dbpath, dirpath):
             else:
                 logging.warning('Invalid file: ' + filepath)
 
+    logging.info('Import completed')
+
+def clean_value_for_export(value):
+    if not value:
+        return value
+    if isinstance(value, buffer):
+        return str(value)
+    elif isinstance(value, str):
+        return value
+    elif u'\\\\' in value:
+        return value.split(u'\\\\')
+    else:
+        return value
+
 def export_db(dbpath, dirpath):
     conn = sqlite3.connect(dbpath)
     cursor = conn.cursor()
-    
-    for row in conn.execute('SELECT * from audio'):
-        print row
+    cursor = execute(conn, 'SELECT * from audio')
+    fields = map(itemgetter(0), cursor.description)
+    for values in cursor:
+        values = map(clean_value_for_export, values)
+        new_tag = dict((k,v) for k,v in zip(fields, values))
+        filepath = new_tag['__path']
+        new_values = dict(z for z in new_tag.iteritems() if not z[0].startswith('__'))
+        if not issubfolder(dirpath, filepath):
+            logging.info('Skipped %s. Not in dirpath.' % filepath)
+            continue
+        try:
+            logging.info(u'Updating %s' % filepath)
+            tag = audioinfo.Tag(filepath)
+        except Exception, e:
+            logging.exception(e)
+        else:
+            logging.debug(new_tag)
+            tag.update(new_values)
+            tag.save()
+            logging.info('Saved new tag to %s' % filepath)
+    logging.info('Export complete')
 
 def parse_args():
     parser = argparse.ArgumentParser(description='Import/Save files to sqlite database.')
@@ -121,7 +183,7 @@ def parse_args():
     if args.action == 'import':
         import_dir(args.dbpath, args.musicdir)
     else:
-        export_db(args.dbpath, args.musicdir):
+        export_db(args.dbpath, args.musicdir)
         
     
 if __name__ == '__main__':
