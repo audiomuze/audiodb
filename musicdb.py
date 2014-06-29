@@ -8,6 +8,12 @@ from operator import itemgetter
 
 from puddlestuff import audioinfo
 
+def get_column_names(conn):
+    columns = {}
+    for row in conn.execute('PRAGMA table_info(audio)'):
+        columns[row[1].lower()] = row[1]
+    return columns
+
 def removeslash(x):
     while x.endswith('/'):
         return removeslash(x[:-1])
@@ -78,7 +84,7 @@ def initdb(dbpath):
     return conn
 
 def import_tag(tag, conn, tables):
-    keys = []
+    keys = {}
     values = []
     for key, value in tag.items():
         if key == '__path':
@@ -89,29 +95,36 @@ def import_tag(tag, conn, tables):
             elif not isinstance(value, basestring):
                 value = u"\\\\".join(value)
 
-        
-        keys.append(key)
+        try:
+            key.decode('ascii')
+        except UnicodeEncodeError:
+            logging.warning('Invalid tag found %s: %s. Not parsing field.' % (tag.filepath, key))
+            continue
+        keys[key.lower()] = key
         values.append(value)
 
     if set(keys).difference(tables):
-        update_db_columns(conn, keys)
+        tables = update_db_columns(conn, keys)
     
     placeholder = u','.join(u'?' for z in values)
+    keys = ['"%s"' % key for key in keys]
     insert = u"INSERT OR REPLACE INTO audio (%s) VALUES (%s)" % (u','.join(keys), placeholder)
     execute(conn, insert, values)
+    return tables
 
 def update_db_columns(conn, tables):
-    cursor = execute(conn, 'SELECT * from audio')
-    new_tables = set(tables).difference(map(itemgetter(0), cursor.description))
+    new_tables = set(tables).difference(get_column_names(conn))
     for table in new_tables:
-        logging.info(u'Creating %s table' % table)
-        execute(conn, u'ALTER TABLE audio ADD COLUMN %s text' % table)
+        logging.info(u'Creating %s table' % tables[table])
+        execute(conn, u'ALTER TABLE audio ADD COLUMN "%s" text' % tables[table])
     conn.commit()
+    cursor = execute(conn, 'SELECT * from audio')
+    return get_column_names(conn)
     
 def import_dir(dbpath, dirpath):
     conn = initdb(dbpath)
     cursor = execute(conn, 'SELECT * from audio')
-    tables = set(map(itemgetter(0), cursor.description))
+    tables = get_column_names(conn)
     
     for filepath in getfiles(dirpath, True):
         try:
@@ -122,8 +135,13 @@ def import_dir(dbpath, dirpath):
             logging.exception(e)
         else:
             if tag is not None:
-                import_tag(tag, conn, tables)
-                logging.info('Imported completed: ' + filepath)
+                try:
+                    tables = import_tag(tag, conn, tables)
+                    logging.info('Imported completed: ' + filepath)
+                except Exception, e:
+                    logging.error('Error occured importing file %s' % filepath)
+                    logging.exception(e)
+                    raise
             else:
                 logging.warning('Invalid file: ' + filepath)
 
@@ -137,15 +155,15 @@ def clean_value_for_export(value):
     elif isinstance(value, str):
         return value
     elif u'\\\\' in value:
-        return value.split(u'\\\\')
+        return filter(None, value.split(u'\\\\'))
     else:
         return value
 
 def export_db(dbpath, dirpath):
     conn = sqlite3.connect(dbpath)
     cursor = conn.cursor()
+    fields = get_column_names(conn)
     cursor = execute(conn, 'SELECT * from audio')
-    fields = map(itemgetter(0), cursor.description)
     for values in cursor:
         values = map(clean_value_for_export, values)
         new_tag = dict((k,v) for k,v in zip(fields, values))
@@ -155,15 +173,24 @@ def export_db(dbpath, dirpath):
             logging.info('Skipped %s. Not in dirpath.' % filepath)
             continue
         try:
-            logging.info(u'Updating %s' % filepath)
+            logging.info('Updating %s' % filepath)
             tag = audioinfo.Tag(filepath)
         except Exception, e:
             logging.exception(e)
         else:
             logging.debug(new_tag)
-            tag.update(new_values)
-            tag.save()
-            logging.info('Saved new tag to %s' % filepath)
+            for key, value in new_tag.iteritems():
+                if not value and key in tag:
+                    del(tag[key])
+                else:
+                    tag[key] = value
+            try:
+                tag.save()
+                logging.info('Updated tag to %s' % filepath)
+            except Exception, e:
+                logging.error('Could not save tag to %s' % filepath)
+                logging.exception(e)
+                
     logging.info('Export complete')
 
 def parse_args():
