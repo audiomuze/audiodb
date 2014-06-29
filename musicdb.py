@@ -1,3 +1,6 @@
+#!/usr/bin/env python2
+# -*- coding: utf8 -*-
+
 import argparse
 import os
 import sqlite3
@@ -83,7 +86,7 @@ def initdb(dbpath):
     conn.commit()
     return conn
 
-def import_tag(tag, conn, tables):
+def import_tag(tag, conn, columns):
     keys = {}
     values = []
     for key, value in tag.items():
@@ -103,20 +106,20 @@ def import_tag(tag, conn, tables):
         keys[key.lower()] = key
         values.append(value)
 
-    if set(keys).difference(tables):
-        tables = update_db_columns(conn, keys)
+    if set(keys).difference(columns):
+        columns = update_db_columns(conn, keys)
     
     placeholder = u','.join(u'?' for z in values)
     keys = ['"%s"' % key for key in keys]
     insert = u"INSERT OR REPLACE INTO audio (%s) VALUES (%s)" % (u','.join(keys), placeholder)
     execute(conn, insert, values)
-    return tables
+    return columns
 
-def update_db_columns(conn, tables):
-    new_tables = set(tables).difference(get_column_names(conn))
-    for table in new_tables:
-        logging.info(u'Creating %s table' % tables[table])
-        execute(conn, u'ALTER TABLE audio ADD COLUMN "%s" text' % tables[table])
+def update_db_columns(conn, columns):
+    new_columns = set(columns).difference(get_column_names(conn))
+    for column in new_columns:
+        logging.info(u'Creating %s column' % columns[column])
+        execute(conn, u'ALTER TABLE audio ADD COLUMN "%s" text' % columns[column])
     conn.commit()
     cursor = execute(conn, 'SELECT * from audio')
     return get_column_names(conn)
@@ -124,7 +127,7 @@ def update_db_columns(conn, tables):
 def import_dir(dbpath, dirpath):
     conn = initdb(dbpath)
     cursor = execute(conn, 'SELECT * from audio')
-    tables = get_column_names(conn)
+    columns = get_column_names(conn)
     
     for filepath in getfiles(dirpath, True):
         try:
@@ -136,7 +139,7 @@ def import_dir(dbpath, dirpath):
         else:
             if tag is not None:
                 try:
-                    tables = import_tag(tag, conn, tables)
+                    columns = import_tag(tag, conn, columns)
                     logging.info('Imported completed: ' + filepath)
                 except Exception, e:
                     logging.error('Error occured importing file %s' % filepath)
@@ -196,13 +199,13 @@ def export_db(dbpath, dirpath):
 def parse_args():
     parser = argparse.ArgumentParser(description='Import/Save files to sqlite database.')
     parser.add_argument('action', choices=['import', 'export'],
-                        help='action to perform import/export')
+                        help='Action to perform. Either import or export')
     parser.add_argument('dbpath', type=str,
-                        help='path to sqlite database')
+                        help='Path to sqlite database.')
     parser.add_argument('musicdir', 
                    help='path to musicdir used for import/export')
     parser.add_argument('--log', 
-                        help='log level', required=False)
+                        help='Log level. Can be DEBUG, INFO, WARNING, ERROR. All output is printed to console.', required=False)
     
     args = parser.parse_args()
     if args.log:
