@@ -1,5 +1,4 @@
 #!/usr/bin/env python2
-# -*- coding: utf8 -*-
 
 import argparse
 import os
@@ -88,7 +87,7 @@ def initdb(dbpath):
 
 def import_tag(tag, conn, columns):
     keys = {}
-    values = []
+    values = {}
     for key, value in tag.items():
         if key == '__path':
             value = buffer(tag.filepath)
@@ -104,11 +103,13 @@ def import_tag(tag, conn, columns):
             logging.warning('Invalid tag found %s: %s. Not parsing field.' % (tag.filepath, key))
             continue
         keys[key.lower()] = key
-        values.append(value)
+        values[key.lower()] = value
 
     if set(keys).difference(columns):
         columns = update_db_columns(conn, keys)
     
+    keys = sorted(keys)
+    values = [values[key] for key in keys]
     placeholder = u','.join(u'?' for z in values)
     keys = ['"%s"' % key for key in keys]
     insert = u"INSERT OR REPLACE INTO audio (%s) VALUES (%s)" % (u','.join(keys), placeholder)
