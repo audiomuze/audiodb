@@ -122,7 +122,6 @@ def update_db_columns(conn, columns):
         logging.info(u'Creating %s column' % columns[column])
         execute(conn, u'ALTER TABLE audio ADD COLUMN "%s" text' % columns[column])
     conn.commit()
-    cursor = execute(conn, 'SELECT * from audio')
     return get_column_names(conn)
     
 def import_dir(dbpath, dirpath):
@@ -165,9 +164,8 @@ def clean_value_for_export(value):
 
 def export_db(dbpath, dirpath):
     conn = sqlite3.connect(dbpath)
-    cursor = conn.cursor()
     fields = get_column_names(conn)
-    cursor = execute(conn, 'SELECT * from audio')
+    cursor = execute(conn, 'SELECT %s from audio' % ",".join('"%s"' % f for f in fields))
     for values in cursor:
         values = map(clean_value_for_export, values)
         new_tag = dict((k,v) for k,v in zip(fields, values))
