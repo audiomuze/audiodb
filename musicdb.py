@@ -68,10 +68,12 @@ def execute(conn, sql, args=None):
             logging.debug(sql + u' ' + u';'.join(log_args))
         except:
             pass
-        return conn.execute(sql, args)
+        cursor = conn.execute(sql, args)
     else:
         logging.debug(sql)
-        return conn.execute(sql)
+        cursor =  conn.execute(sql)
+    conn.commit()
+    return cursor
 
 def initdb(dbpath):
     conn = sqlite3.connect(dbpath)
