@@ -264,10 +264,13 @@ def parse_args():
     args = parser.parse_args()
     if args.log:
         logging.basicConfig(level=args.log.upper())
+
+    dbpath = os.path.realpath(args.dbpath)
+    musicdir = os.path.realpath(args.musicdir)
     if args.action == 'import':
-        import_dir(args.dbpath, args.musicdir)
+        import_dir(dbpath, musicdir)
     else:
-        export_db(args.dbpath, args.musicdir)
+        export_db(dbpath, musicdir)
         
     
 if __name__ == '__main__':
