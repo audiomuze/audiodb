@@ -243,6 +243,7 @@ def export_db(dbpath, dirpath):
                     tag[key] = value
             try:
                 tag.save()
+                audioinfo.setmodtime(tag.filepath, tag.accessed, tag.modified)
                 logging.info('Updated tag to %s' % filepath)
             except Exception, e:
                 logging.error('Could not save tag to %s' % filepath)
