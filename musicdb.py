@@ -235,8 +235,8 @@ def export_db(dbpath, dirpath):
         except Exception, e:
             logging.exception(e)
         else:
-            logging.debug(new_tag)
-            for key, value in new_tag.iteritems():
+            logging.debug(new_values)
+            for key, value in new_values.iteritems():
                 if not value and key in tag:
                     del(tag[key])
                 else:
