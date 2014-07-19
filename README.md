@@ -1,7 +1,7 @@
-audiodb
+musicdb
 =======
 
-Simple python script to import and export audit tags to an SQLite DB
+Simple python script to import and export audio tags to an SQLite DB
 
 Dependencies
 ------------
