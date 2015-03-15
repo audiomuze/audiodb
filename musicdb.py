@@ -147,7 +147,7 @@ def import_tag(tag, conn, columns):
         if key == '__path':
             value = buffer(tag.filepath)
         else:
-            if isinstance(value, (int, long)):
+            if isinstance(value, (int, long, float)):
                 value = unicode(value)
             elif not isinstance(value, basestring):
                 value = u"\\\\".join(value)
